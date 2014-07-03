@@ -1,3 +1,20 @@
+/*
+Copyright 2014 Tamás Gulácsi
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+// Package main of dbfexport exports DBF (DBase III) files to csv or sql.
 package main
 
 import (
@@ -30,7 +47,12 @@ func main() {
 	flagDbfEncoding := flag.String("dbfenc", "iso-8859-2", "DBF file encoding")
 	flagEncoding := flag.String("encoding", "iso-8859-2", "file encoding")
 	flagCsv := flag.Bool("csv", false, "csv output (otherwise .sql)")
+	flagDebug := flag.Bool("v", false, "debug logs")
 	flag.Parse()
+
+	if !*flagDebug {
+		Log.SetHandler(log15.LvlFilterHandler(log15.LvlInfo, log15.StderrHandler))
+	}
 
 	path := ""
 	if flag.NArg() < 1 {
@@ -121,6 +143,7 @@ func exportFile(fn string, ctx context) error {
 	if err != nil {
 		return fmt.Errorf("exportFile create file %s: %v", stripExt(fn)+ext, err)
 	}
+	Log.Info("exportFile", "source", fn, "destination", fh.Name())
 	defer fh.Close()
 	bw := bufio.NewWriter(fh)
 	defer bw.Flush()
@@ -139,9 +162,24 @@ func exportFileCsv(w io.Writer, table *godbf.DbfTable) error {
 	defer cw.Flush()
 	fields := table.Fields()
 	Log.Debug("exportFileCsv", "fields", fields)
+
 	fieldNames := make([]string, len(fields))
-	for i := range fields {
-		fieldNames[i] = fields[i].FieldName()
+	for i, f := range fields {
+		fieldNames[i] = f.FieldName()
+	}
+	err := cw.Write(fieldNames)
+	if err != nil {
+		return err
+	}
+
+	record := make([]string, len(fields))
+	for i := 0; i < table.NumberOfRecords(); i++ {
+		for j := range record {
+			record[j] = table.FieldValue(i, j)
+		}
+		if err = cw.Write(record); err != nil {
+			return err
+		}
 	}
 	return cw.Error()
 }
@@ -209,6 +247,9 @@ func sqlQuoter(f godbf.DbfField, dbfEncoding string) func(string) string {
 	switch f.FieldType() {
 	case "C":
 		return func(x string) string {
+			if x == "" {
+				return "''"
+			}
 			return "'" + strings.Replace(strings.Replace(x,
 				"'", "''", -1),
 				"&", "||CHR(39)||", -1) + "'"
@@ -216,7 +257,10 @@ func sqlQuoter(f godbf.DbfField, dbfEncoding string) func(string) string {
 
 	case "D":
 		return func(x string) string {
-			return "TO_DATE('YYYYMMDD', '" + x + "')"
+			if x == "" {
+				return "NULL"
+			}
+			return "TO_DATE('" + x + "', 'YYYYMMDD')"
 		}
 	}
 	return func(x string) string { return x }
