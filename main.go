@@ -56,7 +56,7 @@ func main() {
 
 	path := ""
 	if flag.NArg() < 1 {
-		dh, err := os.Open("")
+		dh, err := os.Open(".")
 		if err != nil {
 			Log.Crit("cannot open directory", "error", err)
 			os.Exit(1)
@@ -72,6 +72,29 @@ func main() {
 				continue
 			}
 			p := filepath.Join(dh.Name(), fi.Name())
+			sd, err := os.Open(p)
+			if err != nil {
+				Log.Warn("open subdir", "path", p, "error", err)
+				continue
+			}
+			sfis, err := sd.Readdir(-1)
+			sd.Close()
+			if err != nil {
+				Log.Warn("list subdir", "path", p, "error", err)
+				continue
+			}
+			ok := false
+			for _, sfi := range sfis {
+				if strings.HasSuffix(sfi.Name(), ".dbf") || strings.HasSuffix(sfi.Name(), ".DBF") {
+					ok = true
+					break
+				}
+			}
+			if !ok {
+				Log.Debug("search newest dir - no .dbf in subdir", "p", p)
+				continue
+			}
+			Log.Debug("search newest dir", "p", p, "path", path)
 			if path < p {
 				path = p
 			}
@@ -93,6 +116,7 @@ func main() {
 }
 
 func exportDir(path string, ctx context) error {
+	Log.Info("exportDir", "path", path)
 	dh, err := os.Open(path)
 	defer dh.Close()
 	if err != nil {
