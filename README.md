@@ -1,5 +1,7 @@
 # dbf exporter
-Export content of your dbf file int sql/csv.
+Command-line program for exporting then content of your dbf file int sql/csv.
+Compiles anywhere where Go compiler is supported.
+Pre-built binaries for Windows, Mac and Linux!
 
 # Usage
 
@@ -11,6 +13,9 @@ and the result will be an .sql file with W_kl_motor_ table prefix.
 # Install
 
     go get -u github.com/tgulacsi/dbfexport
+
+Or just download one of the pre-built binaries from the
+[Releases](https://github.com/tgulacsi/dbfexport/releases) page.
 
 # License
 
