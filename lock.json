@@ -1,0 +1,38 @@
+{
+    "memo": "5dd4f724ffa34085ff4b980c68fe8c0756984ac2ab6f16501f88c468cc7070bf",
+    "projects": [
+        {
+            "name": "github.com/gogap/godbf",
+            "branch": "master",
+            "revision": "b995caf02fdd8b094afbce971c620a7dba4b5b53",
+            "packages": [
+                "."
+            ]
+        },
+        {
+            "name": "github.com/gogap/mahonia",
+            "branch": "master",
+            "revision": "37416fc26c88044f3dad947362bbea8d6ee416d6",
+            "packages": [
+                "."
+            ]
+        },
+        {
+            "name": "github.com/pkg/errors",
+            "version": "v0.8.0",
+            "revision": "645ef00459ed84a119197bfb8d8205042c6df63d",
+            "packages": [
+                "."
+            ]
+        },
+        {
+            "name": "golang.org/x/text",
+            "branch": "master",
+            "revision": "fd889fe3a20f4878f5f47672fd3ca5b86db005e2",
+            "packages": [
+                "encoding/htmlindex",
+                "transform"
+            ]
+        }
+    ]
+}

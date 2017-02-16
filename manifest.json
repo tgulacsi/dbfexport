@@ -1,0 +1,10 @@
+{
+    "dependencies": {
+        "github.com/gogap/godbf": {
+            "branch": "master"
+        },
+        "github.com/tgulacsi/go": {
+            "branch": "master"
+        }
+    }
+}

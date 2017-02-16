@@ -23,26 +23,28 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
-	"code.google.com/p/go-dbf/godbf"
-	"github.com/tgulacsi/go/text"
-	"gopkg.in/inconshreveable/log15.v2"
-)
+	"golang.org/x/text/encoding/htmlindex"
+	"golang.org/x/text/transform"
 
-var Log = log15.New()
+	//"github.com/LindsayBradford/go-dbf/godbf"
+	"github.com/gogap/godbf"
+	"github.com/pkg/errors"
+)
 
 type context struct {
 	Csv                                bool
 	TablePrefix, DbfEncoding, Encoding string
 }
 
-func main() {
-	Log.SetHandler(log15.StderrHandler)
+var logDebug, logInfo func(keyvals ...interface{}) error
 
+func main() {
 	flagTablePrefix := flag.String("prefix", "W_kl_motor_", "table name prefix")
 	flagDbfEncoding := flag.String("dbfenc", "iso-8859-2", "DBF file encoding")
 	flagEncoding := flag.String("encoding", "iso-8859-2", "file encoding")
@@ -50,21 +52,28 @@ func main() {
 	flagDebug := flag.Bool("v", false, "debug logs")
 	flag.Parse()
 
+	logInfo = func(keyvals ...interface{}) error {
+		log.Println(keyvals...)
+		return nil
+	}
+	logDebug = logInfo
 	if !*flagDebug {
-		Log.SetHandler(log15.LvlFilterHandler(log15.LvlInfo, log15.StderrHandler))
+		logDebug = func(_ ...interface{}) error {
+			return nil
+		}
 	}
 
 	path := ""
 	if flag.NArg() < 1 {
 		dh, err := os.Open(".")
 		if err != nil {
-			Log.Crit("cannot open directory", "error", err)
+			logInfo("cannot open directory", "error", err)
 			os.Exit(1)
 		}
 		fis, err := dh.Readdir(-1)
 		dh.Close()
 		if err != nil {
-			Log.Crit("error listing directory", "path", dh.Name(), "error", err)
+			logInfo("error listing directory", "path", dh.Name(), "error", err)
 			os.Exit(2)
 		}
 		for _, fi := range fis {
@@ -74,13 +83,13 @@ func main() {
 			p := filepath.Join(dh.Name(), fi.Name())
 			sd, err := os.Open(p)
 			if err != nil {
-				Log.Warn("open subdir", "path", p, "error", err)
+				logInfo("open subdir", "path", p, "error", err)
 				continue
 			}
 			sfis, err := sd.Readdir(-1)
 			sd.Close()
 			if err != nil {
-				Log.Warn("list subdir", "path", p, "error", err)
+				logInfo("list subdir", "path", p, "error", err)
 				continue
 			}
 			ok := false
@@ -91,16 +100,16 @@ func main() {
 				}
 			}
 			if !ok {
-				Log.Debug("search newest dir - no .dbf in subdir", "p", p)
+				logDebug("search newest dir - no .dbf in subdir", "p", p)
 				continue
 			}
-			Log.Debug("search newest dir", "p", p, "path", path)
+			logDebug("search newest dir", "p", p, "path", path)
 			if path < p {
 				path = p
 			}
 		}
 		if path == "" {
-			Log.Error("cannot find a dir, please specifiy one!")
+			logInfo("cannot find a dir, please specifiy one!")
 			os.Exit(3)
 		}
 	} else {
@@ -110,13 +119,13 @@ func main() {
 	if err := exportDir(path,
 		context{Csv: *flagCsv, TablePrefix: *flagTablePrefix,
 			DbfEncoding: *flagDbfEncoding, Encoding: *flagEncoding}); err != nil {
-		Log.Error("exportDir", "path", path, "error", err)
+		logInfo("exportDir", "path", path, "error", err)
 		os.Exit(4)
 	}
 }
 
 func exportDir(path string, ctx context) error {
-	Log.Info("exportDir", "path", path)
+	logInfo("exportDir", "path", path)
 	dh, err := os.Open(path)
 	defer dh.Close()
 	if err != nil {
@@ -154,7 +163,7 @@ func exportDir(path string, ctx context) error {
 }
 
 func exportFile(fn string, ctx context) error {
-	Log.Debug("exportFile", "fn", fn)
+	logDebug("exportFile", "fn", fn)
 	table, err := godbf.NewFromFile(fn, ctx.DbfEncoding)
 	if err != nil {
 		return err
@@ -167,13 +176,18 @@ func exportFile(fn string, ctx context) error {
 	if err != nil {
 		return fmt.Errorf("exportFile create file %s: %v", stripExt(fn)+ext, err)
 	}
-	Log.Info("exportFile", "source", fn, "destination", fh.Name())
+	logInfo("exportFile", "source", fn, "destination", fh.Name())
 	defer fh.Close()
 	bw := bufio.NewWriter(fh)
 	defer bw.Flush()
 	var w io.Writer = bw
 	if ctx.Encoding != "" {
-		w = text.NewWriter(bw, text.GetEncoding(ctx.Encoding))
+		enc, err := htmlindex.Get(ctx.Encoding)
+		if err != nil {
+			logInfo("encoding", ctx.Encoding, "error", err)
+			return errors.Wrap(err, ctx.Encoding)
+		}
+		w = transform.NewWriter(bw, enc.NewEncoder())
 	}
 	if ctx.Csv {
 		return exportFileCsv(w, table)
@@ -185,7 +199,7 @@ func exportFileCsv(w io.Writer, table *godbf.DbfTable) error {
 	cw := csv.NewWriter(w)
 	defer cw.Flush()
 	fields := table.Fields()
-	Log.Debug("exportFileCsv", "fields", fields)
+	logDebug("exportFileCsv", "fields", fields)
 
 	fieldNames := make([]string, len(fields))
 	for i, f := range fields {
@@ -219,7 +233,7 @@ func exportFileSQL(w io.Writer, fileName string, table *godbf.DbfTable, ctx cont
 	fields := table.Fields()
 	quoters := make([]func(string) string, len(fields))
 	fieldNames := make([]string, len(fields))
-	Log.Debug("exportFileSQL", "fields", fields)
+	logDebug("exportFileSQL", "fields", fields)
 	for i, f := range fields {
 		if i > 0 {
 			if _, err = io.WriteString(w, ",\n"); err != nil {
